@@ -2,6 +2,7 @@ import websockets
 import collections
 import asyncio
 import json
+import argparse
 
 from fatal import fatal
 
@@ -11,10 +12,11 @@ class SlaveServer(object):
     MASTER_PORT = 6000
     ALIAS = 'alias'
 
-    def __init__(self):
+    def __init__(self, id):
         self.master_websocket = None
         self.master_server_url = None
-        self.send_data = False
+        self.send_data = True
+        self.unique_id = id
         
 
     
@@ -38,18 +40,33 @@ class SlaveServer(object):
     @asyncio.coroutine
     def process_masterslave_interaction(self):
         while True:
-            if self.send_data:
-                yield from self.master_websocket.send('hi ' + self.ALIAS)
+            # if self.send_data:
+            #     yield from self.master_websocket.send('hi ' + self.unique_id)
+            yield from asyncio.sleep(1)
     
     @asyncio.coroutine
     def receive_from_master(self):
+        count = 1
         while True:
             rec = yield from self.master_websocket.recv()
-            print('>> ', rec)
+            count += 1
+            if rec == 'resume':
+                #change the senddata to True
+                print('recived << ', rec)
+                print('sending', count)
+                yield from self.master_websocket.send('hi ' + self.unique_id)
+            else:
+                print('paused', count)
+                self.send_data = False
+            yield from asyncio.sleep(3)
     
     def run_slave(self):
         asyncio.get_event_loop().run_until_complete(self.handler())
 
 if __name__ == '__main__':
-    slave_server = SlaveServer()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-id', dest='id', type=str)
+    args = parser.parse_args()
+
+    slave_server = SlaveServer(args.id)
     slave_server.run_slave()

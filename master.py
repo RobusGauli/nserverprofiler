@@ -12,6 +12,8 @@ class MasterServer(object):
     MASTER_HOST = 'localhost'
     MASTER_PORT = 6000
 
+    COMMAND_RESUME = 'resume'
+
     def __init__(self):
         self.current_slave = None
         self.slaves = set()
@@ -26,24 +28,29 @@ class MasterServer(object):
     def master_consumer(self, websocket):
         '''I should be able to receive the the data from the just single websocket at any given time'''
         while True:
-            yield from websocket.send('master')
-
+            msg = yield from self.current_slave.recv()
+            yield from asyncio.sleep(2)
+            print(msg, 'g')
+    
     @asyncio.coroutine 
     def master_sender(self, websocket):
-        '''I should be able to send the command to the slave to perform the certain action'''
+        '''I should be able to send the command to the current slave to perform the certain action'''
         print('yeah')
         while True:
-            msg = yield from websocket.recv()
-            print(msg, 'g')
+            yield from self._send_command(self.COMMAND_RESUME)
+            
     
     @asyncio.coroutine
     def _handler(self, websocket, path):
-        self.slaves.add(websocket)
+        slave_socket = SlaveSocket(websocket)
+        self.slaves.add(slave_socket)
         #let this be a current_slave
-        self.current_slave = websocket
+        self.current_slave = slave_socket
+        self.current_slave.send_data = True
+        
         master_consumer_task = asyncio.ensure_future(self.master_consumer(websocket))
         master_sender_task = asyncio.ensure_future(self.master_sender(websocket))
-        done, pending = yield from asyncio.wait(
+        _, pending = yield from asyncio.wait(
             [master_consumer_task, master_sender_task],
             return_when=asyncio.FIRST_COMPLETED
         )
@@ -61,6 +68,19 @@ class MasterServer(object):
         asyncio.get_event_loop().run_forever()
 
 
+
+class SlaveSocket(object):
+
+    def __init__(self, slave_socket):
+        self.slave_socket = slave_socket
+        self.send_data = False
+    
+    def send(self, data):
+        yield from self.slave_socket.send(data)
+    
+    def recv(self):
+        msg = yield from self.slave_socket.recv()
+        return msg
 if __name__ == '__main__':
     master_server = MasterServer()
     master_server.run_master()
